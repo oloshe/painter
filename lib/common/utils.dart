@@ -15,5 +15,9 @@ extension IntObsExt on int {
 }
 
 extension DoubleObsExt on double {
-  SingleValueProvider<double> get obs => SingleValueProvider(this);
+  SingleValueProvider<double> get obs => SingleValueProvider( this);
+}
+
+extension SizeIncludeOffset on Size {
+
 }

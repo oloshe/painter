@@ -9,6 +9,8 @@ class ScreenAdaptor {
 
   static late double _notchHeight;
 
+  static late double _notchBottom;
+
   /// 根据获取的实际screenWidth和screenHeight计算出1个rpx对应的实际长度
   /// [designedWidth]是设计稿的标准宽度，默认750
   static void init(BuildContext context, {double designedWidth = 750}) {
@@ -17,6 +19,7 @@ class ScreenAdaptor {
     _screenHeight = _mediaQueryData.size.height;
     _scale = _screenWidth / designedWidth;
     _notchHeight = _mediaQueryData.padding.top;
+    _notchBottom = _mediaQueryData.padding.bottom;
   }
 
   /// 缩放因子，小于1
@@ -30,6 +33,8 @@ class ScreenAdaptor {
 
   /// 顶部刘海高度
   static double get notchHeight => _notchHeight;
+
+  static double get notchBottom => _notchBottom;
 
   /// 把rpx值转换为flutter实际使用的dp值
   static double rpx2dp(double rpx) {
