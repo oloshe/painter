@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 typedef ColorMap = Map<String, Color>;
 
+const Color defaultColor = Colors.black;
 const Color defaultBgColor = Colors.white;
 const List<double> strokeWidths = [1, 3, 5, 7, 9, 12, 15];
 
@@ -54,8 +55,9 @@ class DrawEntity {
     path.lineTo(next.dx, next.dy);
   }
 
-  void draw(Canvas canvas, Paint paint, Color bgColor) {
-    paint.color = clear ? bgColor : color;
+  void draw(Canvas canvas, Paint paint, Color bgColor, [int? alpha]) {
+    final _color = alpha != null ? color.withAlpha(alpha) : color;
+    paint.color = clear ? bgColor : _color;
     paint.strokeWidth = strokeWidth;
     canvas.drawPath(path, paint);
   }

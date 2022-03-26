@@ -16,6 +16,10 @@ dependencies:
   google_fonts: ^2.3.1 # 字体
   flutter_colorpicker: ^1.0.3 #颜色选择器
   image_gallery_saver: ^1.7.1 #保存图片
+  tuple: ^2.0.0 #配合provider使用，用于组合监听的数据
+  shared_preferences: ^2.0.9 #key value形式缓存本地数据，类似localStorage
+  fluttertoast: ^8.0.9 # 提示框
+  flutter_slidable: ^1.2.0 # 滑动菜单
 
 
 dev_dependencies:
