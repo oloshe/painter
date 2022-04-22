@@ -1,6 +1,3 @@
-import 'dart:ffi';
-import 'dart:math';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -32,8 +29,6 @@ class _DrawPageState extends State<DrawPage> {
   final DrawPageModel model = DrawPageModel();
   late Size paintSize;
   final GlobalKey paintKey = GlobalKey();
-  final int _throttleMillsSecond = 15;
-  int _lastMillsSecond = 0;
 
   @override
   void initState() {
@@ -79,226 +74,191 @@ class _DrawPageState extends State<DrawPage> {
             ),
           ],
         ),
-        bottomNavigationBar: Material(
-          elevation: 20,
-          child: SizedBox(
-            height: 60,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 100,
-                    height: double.infinity,
-                    child: Selector<TempPainterController, Color>(
-                      selector: (context, val) => val.color,
-                      builder: (context, val, child) => ElevatedButton(
-                        onPressed: showBrushColorPicker,
-                        style: ButtonStyle(
-                            backgroundColor: MaterialStateProperty.all(val),
-                            shape: MaterialStateProperty.all(
-                                RoundedRectangleBorder(
-                                    borderRadius: const BorderRadius.only(
-                                      topRight: Radius.elliptical(60, 100),
-                                    ),
-                                    side: BorderSide(color: val)))),
-                        child: const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: showRecentColorPicker,
-                    icon: const Icon(
-                      Icons.color_lens_rounded,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: showBackgroundColorPicker,
-                    icon: const Icon(
-                      Icons.image,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: showSizeSelector,
-                    icon: const Icon(
-                      Icons.brush_rounded,
-                    ),
-                  ),
-                  Selector<TempPainterController, PaintMode>(
-                    selector: (context, c) => c.mode,
-                    builder: (context, val, child) => IconButton(
-                      onPressed: onSetEraserMode,
-                      icon: Icon(
-                        Icons.format_color_reset,
-                        color: val == PaintMode.eraser ? Colors.blue : null,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: showLayerSetting,
-                    icon: const Icon(
-                      Icons.layers,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onShowZoom,
-                    icon: const Icon(
-                      Icons.zoom_out_map_rounded,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _onClear,
-                    icon: const Icon(Icons.clear_rounded),
-                  )
-                ],
-              ),
-            ),
-          ),
-        ),
+        bottomNavigationBar: buildBottomBar(),
         body: Stack(
           children: [
             Center(
               child: ColoredBox(
                 color: Colors.white,
-                child: LayoutBuilder(builder: (context, constraints) {
-                  if (constraints.maxHeight > constraints.maxWidth) {
-                    paintSize = Size.square(constraints.maxWidth * 0.8);
-                  } else {
-                    paintSize = Size.square(constraints.maxHeight);
-                  }
-                  return SizedBox.fromSize(
-                    size: paintSize,
-                    child: Stack(
-                      children: [
-                        /// 只显示旧线段
-                        Selector<DrawPageModel, Tuple2<double, Offset>>(
-                          selector: (context, m) {
-                            return Tuple2(m.zoom, m.zoomOffset);
-                          },
-                          builder: (context, val, child) => Container(
-                            width: paintSize.width,
-                            height: paintSize.height,
-                            decoration: const BoxDecoration(),
-                            clipBehavior: Clip.hardEdge,
-                            child: Transform.scale(
-                              scale: val.item1,
-                              origin: val.item2,
-                              child: child,
-                            ),
-                          ),
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              size: paintSize,
-                              painter: DrawPainter(layerController),
-                            ),
-                          ),
-                        ),
-                        // 当前绘制线段
-                        Selector<DrawPageModel, Tuple2<double, Offset>>(
-                          selector: (context, m) =>
-                              Tuple2(m.zoom, m.zoomOffset),
-                          builder: (context, val, child) => SizedBox.fromSize(
-                            size: paintSize,
-                            child: SingleTouchWidget(
-                              child: Transform.scale(
-                                scale: val.item1,
-                                origin: val.item2,
-                                child: GestureDetector(
-                                  onPanStart: onDown,
-                                  onPanUpdate: onUpdate,
-                                  onPanEnd: (_) => onEnd(),
-                                  child: RepaintBoundary(
-                                    child: CustomPaint(
-                                      size: paintSize,
-                                      painter: TempDrawPainter(tempController),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxHeight > constraints.maxWidth) {
+                      paintSize = Size.square(constraints.maxWidth);
+                    } else {
+                      paintSize = Size.square(constraints.maxHeight);
+                    }
+                    return SizedBox.fromSize(
+                      size: paintSize,
+                      child: Stack(
+                        children: [
+                          /// 只显示旧线段
+                          buildLayer(),
+                          // 当前绘制线段
+                          buildTemp(),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-            Positioned(
-              top: 0,
-              left: 0,
-              child: Selector<DrawPageModel, bool>(
-                selector: (context, m) => m.isDefaultZoom,
-                builder: (context, hidden, child) {
-                  if (hidden) {
-                    return const SizedBox.shrink();
-                  }
-                  return LayoutBuilder(builder: (context, _) {
-                    return Selector<DrawPageModel, bool>(
-                        selector: (_, m) => m.zoomMoving,
-                        builder: (context, val, child) {
-                          return AnimatedOpacity(
-                            opacity: val ? 1 : 0.4,
-                            duration: 500.milliseconds,
-                            child: Transform.scale(
-                              scale: 0.4,
-                              alignment: Alignment.topLeft,
-                              child: GestureDetector(
-                                onPanDown: (details) {
-                                  model.setZoomOffset(
-                                      paintSize, details.localPosition);
-                                  model.setZoomMoving(true);
-                                },
-                                onPanUpdate: (details) {
-                                  model.setZoomOffset(
-                                      paintSize, details.localPosition);
-                                },
-                                onPanEnd: (details) {
-                                  model.setZoomMoving(false);
-                                },
-                                onPanCancel: () {
-                                  model.setZoomMoving(false);
-                                },
-                                onDoubleTap: () {
-                                  model.resetZoom(true);
-                                },
-                                child: Container(
-                                  width: paintSize.width,
-                                  height: paintSize.height,
-                                  decoration: const BoxDecoration(
-                                      color: Colors.black26,
-                                      border: Border.fromBorderSide(
-                                        BorderSide(color: Colors.blue),
-                                      )),
-                                  child: Center(
-                                    child: RepaintBoundary(
-                                      child: CustomPaint(
-                                        size: paintSize,
-                                        painter: DrawPainter(layerController,
-                                            scale: 1),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        });
-                  });
-                },
-              ),
-            ),
+            // buildZoom(),
           ],
         ),
       ),
     );
   }
 
-  void onDown(DragStartDetails details) {
+  Selector<DrawPageModel, Tuple2<double, Offset>> buildTemp() {
+    return Selector<DrawPageModel, Tuple2<double, Offset>>(
+      selector: (context, m) => Tuple2(m.zoom, m._zoomOffset),
+      builder: (context, val, child) => SizedBox.fromSize(
+        size: paintSize,
+        child: Transform.scale(
+          scale: val.item1,
+          origin: val.item2,
+          child: Selector<DrawPageModel, bool>(
+              selector: (_, __) => model.isZoom,
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  size: paintSize,
+                  painter: TempDrawPainter(tempController),
+                ),
+              ),
+              builder: (context, _, child) {
+                if (model.isZoom) {
+                  return GestureDetector(
+                    onScaleStart: onZoomStart,
+                    onScaleUpdate: onZoomUpdate,
+                    onScaleEnd: onZoomEnd,
+                    child: child,
+                  );
+                } else {
+                  return GestureDetector(
+                    onPanStart: onDrawStart,
+                    onPanUpdate: onDrawUpdate,
+                    onPanEnd: onDrawEnd,
+                    child: child,
+                  );
+                }
+              }),
+        ),
+      ),
+    );
+  }
+
+  Selector<DrawPageModel, Tuple2<double, Offset>> buildLayer() {
+    return Selector<DrawPageModel, Tuple2<double, Offset>>(
+      selector: (_, __) {
+        return Tuple2(model.zoom, model.zoomOrigin);
+      },
+      builder: (context, _, child) => Container(
+        width: paintSize.width,
+        height: paintSize.height,
+        decoration: const BoxDecoration(color: Colors.blueGrey),
+        clipBehavior: Clip.hardEdge,
+        child: Transform.scale(
+          scale: model.zoom,
+          origin: model.zoomOrigin,
+          child: child,
+        ),
+      ),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          size: paintSize,
+          painter: DrawPainter(layerController),
+        ),
+      ),
+    );
+  }
+
+  Material buildBottomBar() {
+    return Material(
+      elevation: 20,
+      child: SizedBox(
+        height: 60,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 100,
+                height: double.infinity,
+                child: Selector<TempPainterController, Color>(
+                  selector: (context, val) => val.color,
+                  builder: (context, val, child) => ElevatedButton(
+                    onPressed: showBrushColorPicker,
+                    style: ButtonStyle(
+                        backgroundColor: MaterialStateProperty.all(val),
+                        shape: MaterialStateProperty.all(RoundedRectangleBorder(
+                            borderRadius: const BorderRadius.only(
+                              topRight: Radius.elliptical(60, 100),
+                            ),
+                            side: BorderSide(color: val)))),
+                    child: const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: showRecentColorPicker,
+                icon: const Icon(
+                  Icons.color_lens_rounded,
+                ),
+              ),
+              IconButton(
+                onPressed: showBackgroundColorPicker,
+                icon: const Icon(
+                  Icons.image,
+                ),
+              ),
+              IconButton(
+                onPressed: showSizeSelector,
+                icon: const Icon(
+                  Icons.brush_rounded,
+                ),
+              ),
+              Selector<TempPainterController, PaintMode>(
+                selector: (context, c) => c.mode,
+                builder: (context, val, child) => IconButton(
+                  onPressed: onSetEraserMode,
+                  icon: Icon(
+                    Icons.format_color_reset,
+                    color: val == PaintMode.eraser ? Colors.blue : null,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: showLayerSetting,
+                icon: const Icon(
+                  Icons.layers,
+                ),
+              ),
+              IconButton(
+                onPressed: onShowZoom,
+                icon: Selector<DrawPageModel, bool>(
+                  selector: (_, __) => model.isZoom,
+                  builder: (_, isZoom, __) => Icon(
+                    Icons.zoom_in,
+                    color: isZoom ? Colors.blue : null,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _onClear,
+                icon: const Icon(Icons.clear_rounded),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void onDrawStart(DragStartDetails details) {
     tempController.newLine(details.localPosition);
   }
 
-  void onUpdate(DragUpdateDetails details) {
+  void onDrawUpdate(DragUpdateDetails details) {
     // var now = DateTime.now().millisecondsSinceEpoch;
     // if (now - _lastMillsSecond < _throttleMillsSecond) {
     //   return;
@@ -312,15 +272,31 @@ class _DrawPageState extends State<DrawPage> {
         tempController.newLine(pos);
       }
     } else {
-      onEnd();
+      onDrawEnd(null);
     }
   }
 
-  void onEnd() {
+  void onDrawEnd(dynamic _) {
     var entity = tempController.lineDone();
     if (entity != null) {
       layerController.addLine(entity);
     }
+  }
+
+  void onZoomStart(ScaleStartDetails details) {
+    model._initialFocalPoint = details.focalPoint;
+    model._initialScale = model.zoom;
+  }
+
+  void onZoomUpdate(ScaleUpdateDetails details) {
+    final sp = details.focalPoint - model._initialFocalPoint;
+    model.setSessionZoomOffset(sp);
+    model.setZoom(model._initialScale * details.scale);
+  }
+
+  void onZoomEnd(ScaleEndDetails details) {
+    model.setZoomOffset(model._zoomOffset + model._sessionOffset);
+    model.setSessionZoomOffset(Offset.zero);
   }
 
   // 弹出颜色选择
@@ -589,61 +565,7 @@ class _DrawPageState extends State<DrawPage> {
 
   /// 显示缩放面板
   onShowZoom() {
-    showModalBottomSheet(
-      context: context,
-      elevation: 20,
-      isScrollControlled: true,
-      builder: (context) {
-        return MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: model),
-          ],
-          builder: (context, _) {
-            return SizedBox(
-              height: 200.rpx + ScreenAdaptor.notchBottom,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 100.rpx,
-                          child: Center(
-                            child: Selector<DrawPageModel, double>(
-                              selector: (context, m) => m.zoom,
-                              builder: (context, val, child) =>
-                                  Text(val.toStringAsFixed(1)),
-                            ),
-                          ),
-                        ),
-                        Flexible(
-                          flex: 1,
-                          child: Selector<DrawPageModel, double>(
-                            selector: (context, m) => m.zoom,
-                            builder: (context, val, child) => Slider(
-                              min: DrawPageModel.minZoom,
-                              max: DrawPageModel.maxZoom,
-                              value: val,
-                              onChanged: (val) {
-                                model.setZoom(val);
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: ScreenAdaptor.notchBottom,
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    model.setIsZoom(!model.isZoom);
   }
 
   void _onClear() {
@@ -673,10 +595,11 @@ class _DrawPageState extends State<DrawPage> {
 
   void showSetOpacity(LayerData layer) async {
     var opacityModel = layer.opacity.provider;
-    await showDialog(
+    await showModalBottomSheet(
       context: context,
+      barrierColor: Colors.black12,
       builder: (context) {
-        return Dialog(
+        return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -688,7 +611,7 @@ class _DrawPageState extends State<DrawPage> {
                       SizedBox(
                         width: 50,
                         child: Center(
-                          child: Text(opacityModel.obs(context).toString()),
+                          child: Text(opacityModel.obs(context).percent(0xff)),
                         ),
                       ),
                       Expanded(
@@ -717,6 +640,7 @@ class _DrawPageState extends State<DrawPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      barrierColor: Colors.black12,
       builder: (context) {
         return SizedBox(
           height: ScreenAdaptor.screenHeight / 3,
@@ -754,33 +678,37 @@ class _DrawPageState extends State<DrawPage> {
                       var itemExtend = 80.0;
                       return Expanded(
                         child: Scrollbar(
-                          child: ListView(
+                          child: ReorderableListView.builder(
+                            itemCount: layerController.layers.length,
                             itemExtent: itemExtend,
-                            children: [
-                              for (var layer in layerController.layers)
-                                LayerItem(
-                                  layer,
-                                  key: layer.key,
-                                  itemExtend: itemExtend,
-                                  selected: layerController.isCurLayer(layer),
-                                  onDelete: () {
-                                    final ret =
-                                        layerController.removeLayer(layer);
-                                    if (!ret) {
-                                      Fluttertoast.showToast(
-                                        msg: "At least one layer",
-                                        textColor: Colors.white,
-                                      );
-                                    }
-                                  },
-                                  onOpacity: () {
-                                    showSetOpacity(layer);
-                                  },
-                                  onSelect: () {
-                                    layerController.setCurLayer(layer);
-                                  },
-                                ),
-                            ],
+                            onReorder: (a, b) {
+                              layerController.orderLayer(a, b);
+                            },
+                            itemBuilder: (context, index) {
+                              final layer = layerController.layers[index];
+                              return LayerItem(
+                                layer,
+                                key: layer.key,
+                                itemExtend: itemExtend,
+                                selected: layerController.isCurLayer(layer),
+                                onDelete: () {
+                                  final ret =
+                                      layerController.removeLayer(layer);
+                                  if (!ret) {
+                                    Fluttertoast.showToast(
+                                      msg: "At least one layer",
+                                      textColor: Colors.white,
+                                    );
+                                  }
+                                },
+                                onOpacity: () {
+                                  showSetOpacity(layer);
+                                },
+                                onSelect: () {
+                                  layerController.setCurLayer(layer);
+                                },
+                              );
+                            },
                           ),
                         ),
                       );
@@ -806,15 +734,22 @@ class DrawPageModel with ChangeNotifier {
   static double maxZoom = 5;
   static double minZoom = 1;
   static double defaultZoom = 1;
-  late double zoom;
-  late Offset zoomOffset;
-  bool zoomMoving = false;
-
-  bool get isDefaultZoom => zoom == defaultZoom;
 
   DrawPageModel() {
     resetZoom();
   }
+
+  late double zoom;
+  bool isZoom = false;
+  bool get isDefaultZoom => zoom == defaultZoom;
+
+  Offset _initialFocalPoint = Offset.zero;
+  double _initialScale = 0;
+
+  late Offset _zoomOffset;
+  Offset _sessionOffset = Offset.zero;
+
+  Offset get zoomOrigin => _zoomOffset + _sessionOffset;
 
   setZoom(double val) {
     if (val > maxZoom || val < minZoom) {
@@ -826,22 +761,27 @@ class DrawPageModel with ChangeNotifier {
 
   void resetZoom([bool? notify]) {
     zoom = defaultZoom;
-    zoomOffset = const Offset(0, 0);
+    _zoomOffset = Offset.zero;
     if (notify == true) {
       notifyListeners();
     }
   }
 
-  void setZoomOffset(Size origin, Offset pos) {
-    var _pos = origin.constraint(pos);
-    final halfX = origin.width / 2;
-    final halfY = origin.height / 2;
-    zoomOffset = _pos.translate(-halfX, -halfY);
+  void setZoomOffset(Offset offset) {
+    _zoomOffset = offset;
     notifyListeners();
   }
 
-  void setZoomMoving(bool moving) {
-    zoomMoving = moving;
+  void setSessionZoomOffset(Offset offset) {
+    _sessionOffset = offset;
+    notifyListeners();
+  }
+
+  void setIsZoom(bool _isZoom) {
+    isZoom = _isZoom;
+    if (!_isZoom) {
+      resetZoom();
+    }
     notifyListeners();
   }
 }
@@ -876,7 +816,36 @@ class LayerItem extends StatelessWidget {
                 children: [
                   SlidableAction(
                     onPressed: (_) {
-                      // pass
+                      showDialog(
+                        context: context,
+                        builder: (_) {
+                          var name = layer.name;
+                          return AlertDialog(
+                            title: const Text('Edit Name'),
+                            content: TextFormField(
+                              onChanged: (val) => name = val,
+                              initialValue: layer.name,
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                                child: const Text('cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  if (name.isNotEmpty) {
+                                    layer.setName(name);
+                                  }
+                                  Navigator.pop(context);
+                                },
+                                child: const Text('confirm'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
                     },
                     icon: Icons.edit,
                     label: 'Rename',
@@ -906,24 +875,25 @@ class LayerItem extends StatelessWidget {
                           height: 40,
                           child: Row(
                             children: [
-                              IconButton(
-                                onPressed: () {
-                                  layer.setVisible(!layer.visible);
-                                },
-                                icon: Icon(
-                                  layer.visible ? Icons.visibility : Icons.visibility_off,
-                                  color: Colors.grey,
+                              Material(
+                                type: MaterialType.transparency,
+                                child: IconButton(
+                                  onPressed: () {
+                                    layer.setVisible(!layer.visible);
+                                  },
+                                  icon: Icon(
+                                    layer.visible
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ),
                               TextButton(
-                                onPressed: !layer.visible ? null : onOpacity,
+                                onPressed: onOpacity,
                                 child: Row(
                                   children: [
-                                    Icon(
-                                      Icons.opacity,
-                                      color:
-                                          layer.visible ? Colors.blue : Colors.grey,
-                                    ),
+                                    const Icon(Icons.opacity),
                                     Text(layer.opacityPercent),
                                   ],
                                 ),
@@ -939,7 +909,12 @@ class LayerItem extends StatelessWidget {
                             ),
                             child: SizedBox(
                               width: double.infinity,
-                              child: Text(layer.name),
+                              child: Selector<LayerData, String>(
+                                selector: (_, __) => layer.name,
+                                builder: (_, name, child) => Text(
+                                  name,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -956,57 +931,6 @@ class LayerItem extends StatelessWidget {
           },
         );
       },
-    );
-  }
-}
-
-class _SingleTouchRecognizer extends OneSequenceGestureRecognizer {
-  int _p = 0;
-
-  @override
-  void addPointer(PointerDownEvent event) {
-    startTrackingPointer(event.pointer);
-
-    if (_p == 0) {
-      resolve(GestureDisposition.rejected);
-      _p = event.pointer;
-    } else {
-      resolve(GestureDisposition.accepted);
-    }
-  }
-
-  @override
-  String get debugDescription => 'single touch recognizer';
-
-  @override
-  void didStopTrackingLastPointer(int pointer) {}
-
-  @override
-  void handleEvent(PointerEvent event) {
-    if (!event.down && event.pointer == _p) {
-      _p = 0;
-    }
-  }
-}
-
-class SingleTouchWidget extends StatelessWidget {
-  final Widget child;
-  const SingleTouchWidget({
-    required this.child,
-    Key? key,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return RawGestureDetector(
-      gestures: <Type, GestureRecognizerFactory>{
-        _SingleTouchRecognizer:
-            GestureRecognizerFactoryWithHandlers<_SingleTouchRecognizer>(
-          () => _SingleTouchRecognizer(),
-          (_SingleTouchRecognizer instance) {},
-        ),
-      },
-      child: child,
     );
   }
 }

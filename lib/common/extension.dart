@@ -27,3 +27,7 @@ extension SizeConstraint on Size {
     return Offset(dx, dy);
   }
 }
+
+extension PecentExt on int {
+  String percent(int max) => '${(this / max * 100).toStringAsFixed(0)}%';
+}

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:painter/common/extension.dart';
 import 'package:painter/common/local_storage.dart';
 import 'package:painter/page/draw/draw_data.dart';
 import 'package:painter/page/draw/draw_painter.dart';
@@ -227,7 +228,7 @@ class LayerData with ChangeNotifier {
   /// 透明度
   int opacity = 0xff;
 
-  String get opacityPercent => '${(opacity / 0xff * 100).toStringAsFixed(0)}%';
+  String get opacityPercent => opacity.percent(0xff);
 
   /// 是否可以撤销
   bool get canUndo => lines.isNotEmpty;
@@ -261,6 +262,12 @@ class LayerData with ChangeNotifier {
       garbageLines.add(entity);
       notifyListeners();
     }
+  }
+
+  setName(String newName) {
+    name = newName;
+    print('new name: $newName');
+    notifyListeners();
   }
 
   redo() {
